@@ -5,6 +5,8 @@ void main() {
   runApp(const BajaApp());
 }
 
+enum UserProfile { pilot, team }
+
 class ChatMessage {
   final String id;
   final String content;
@@ -23,8 +25,21 @@ class ChatMessage {
 }
 
 class BajaChat extends ChangeNotifier {
-  final List<ChatMessage> _messages = [];
+  UserProfile? _profile;
+  UserProfile? get profile => _profile;
+  bool get isLoggedIn => _profile != null;
 
+  void selectProfile(UserProfile profile) {
+    _profile = profile;
+    notifyListeners();
+  }
+
+  void logout() {
+    _profile = null;
+    notifyListeners();
+  }
+
+  final List<ChatMessage> _messages = [];
   List<ChatMessage> get messages => _messages;
 
   List<String> _options = [
@@ -87,7 +102,7 @@ class BajaApp extends StatelessWidget {
 
     return ChangeNotifierProvider<BajaChat>(
       create: (_) => BajaChat(),
-      builder: (BuildContext context, Widget? child) {
+      builder: (context, _) {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           title: 'Baja Communication',
@@ -132,9 +147,129 @@ class BajaApp extends StatelessWidget {
               ),
             ),
           ),
-          home: const RootScreen(),
+          home: Consumer<BajaChat>(
+            builder: (context, chat, _) {
+              if (!chat.isLoggedIn) return const LoginScreen();
+              if (chat.profile == UserProfile.pilot) return const RootScreen(initialIndex: 1);
+              return const RootScreen(initialIndex: 0);
+            },
+          ),
         );
       },
+    );
+  }
+}
+
+class LoginScreen extends StatelessWidget {
+  const LoginScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final chat = Provider.of<BajaChat>(context, listen: false);
+
+    return Scaffold(
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Icon(Icons.directions_car, size: 72, color: colorScheme.primary),
+              const SizedBox(height: 16),
+              Text(
+                'BAJA Communication',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.onSurface,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Selecione seu perfil para continuar',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurface.withOpacity(0.6)),
+              ),
+              const SizedBox(height: 48),
+              _ProfileCard(
+                icon: Icons.people_alt,
+                label: 'Equipe',
+                description: 'Acesso ao chat e gerenciamento',
+                color: colorScheme.primary,
+                onTap: () => chat.selectProfile(UserProfile.team),
+              ),
+              const SizedBox(height: 16),
+              _ProfileCard(
+                icon: Icons.drive_eta,
+                label: 'Piloto',
+                description: 'Acesso rápido aos botões de status',
+                color: colorScheme.secondary,
+                onTap: () => chat.selectProfile(UserProfile.pilot),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String description;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ProfileCard({
+    required this.icon,
+    required this.label,
+    required this.description,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: Theme.of(context).colorScheme.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Row(
+            children: [
+              Icon(icon, size: 40, color: color),
+              const SizedBox(width: 20),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text(description,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withOpacity(0.6))),
+                  ],
+                ),
+              ),
+              Icon(Icons.arrow_forward_ios,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -219,7 +354,17 @@ class _ChatScreenState extends State<ChatScreen> {
     final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text("BAJA - Equipe")),
+      appBar: AppBar(
+        title: const Text("BAJA - Equipe"),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Trocar perfil',
+            onPressed: () =>
+                Provider.of<BajaChat>(context, listen: false).logout(),
+          )
+        ],
+      ),
       body: Column(
         children: <Widget>[
           Expanded(
@@ -230,8 +375,8 @@ class _ChatScreenState extends State<ChatScreen> {
                   padding: const EdgeInsets.all(8),
                   itemCount: chatData.messages.length,
                   itemBuilder: (context, index) {
-                    final ChatMessage message = chatData.messages[chatData.messages.length - 1 - index];
-
+                    final ChatMessage message = chatData
+                        .messages[chatData.messages.length - 1 - index];
                     String? repliedContent;
                     if (message.originalMessageId != null) {
                       for (var msg in chatData.messages) {
@@ -241,7 +386,6 @@ class _ChatScreenState extends State<ChatScreen> {
                         }
                       }
                     }
-
                     return ChatMessageCard(
                       message: message,
                       repliedContent: repliedContent,
@@ -355,7 +499,17 @@ class PilotScreen extends StatelessWidget {
     final bajaChat = Provider.of<BajaChat>(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text("BAJA - Piloto")),
+      appBar: AppBar(
+        title: const Text("BAJA - Piloto"),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Trocar perfil',
+            onPressed: () =>
+                Provider.of<BajaChat>(context, listen: false).logout(),
+          )
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -383,16 +537,23 @@ class PilotScreen extends StatelessWidget {
 }
 
 class RootScreen extends StatefulWidget {
-  const RootScreen({super.key});
+  final int initialIndex;
+  const RootScreen({super.key, this.initialIndex = 0});
 
   @override
   State<RootScreen> createState() => _RootScreenState();
 }
 
 class _RootScreenState extends State<RootScreen> {
-  int _selectedIndex = 0;
+  late int _selectedIndex;
 
-  static const _screens = <Widget>[
+  @override
+  void initState() {
+    super.initState();
+    _selectedIndex = widget.initialIndex;
+  }
+
+  final List<Widget> _screens = const [
     ChatScreen(),
     PilotScreen(),
   ];
@@ -402,7 +563,7 @@ class _RootScreenState extends State<RootScreen> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      body: Center(child: _screens[_selectedIndex]),
+      body: _screens[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(icon: Icon(Icons.people_alt), label: 'Equipe'),
