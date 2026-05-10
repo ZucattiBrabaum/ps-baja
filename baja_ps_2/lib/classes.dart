@@ -138,16 +138,14 @@ class BajaChat extends ChangeNotifier {
 
   List<String> _options = [
     "BOX!",
-    "PNEU OK",
-    "MOTOR OK",
-    "PROBLEMA NA TRACAO",
-    "SUPER AQUECIMENTO!",
-    "PROBLEMA COM FREIO!",
-    "PROBLEMA NA SUSPENSAO",
-    "PROBLEMA ELETRICO",
-    "FALHA NA DIRECAO",
-    "COMBUSTIVEL BAIXO",
-    "MENSAGEM LIVRE",
+    "FREIO!",
+    "ELÉTRICA!",
+    "COMBUSTÍVEL!",
+    "POWERTRAIN!",
+    "PROTEÇÃO CVT",
+    "NÃO ENTENDI",
+    "OK",
+    "NEGATIVO",
   ];
 
   List<String> get options => _options;
