@@ -1,3 +1,4 @@
+
 import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
 
@@ -23,6 +24,50 @@ class ChatMessage {
 
   String get senderLabel => fromPilot ? 'Piloto' : 'Equipe';
 }
+
+class User {
+  String nome;
+  String email;
+  String senha;
+  String perfil;
+
+  User({
+    required this.nome,
+    required this.email,
+    required this.senha,
+    required this.perfil,
+  });
+}
+
+class AuthService {
+  final List<User> _usuarios = [
+    User(
+      nome: "Teste",
+      email: "vitorteste@baja.com",
+      senha: "ronaldo",
+      perfil: "piloto",
+    )
+  ];
+
+  void cadastrar(String nome, String email, String senha, String perfil) {
+    User novoUsuario = User(
+      nome: nome,
+      email: email,
+      senha: senha,
+      perfil: perfil,
+    );
+    _usuarios.add(novoUsuario);
+  }
+
+  User? login(String email, String senha) {
+    for (User u in _usuarios) {
+      if (u.email == email && u.senha == senha) {
+        return u;
+      }
+    }
+    return null;
+  }        
+}            
 
 class BajaChat extends ChangeNotifier {
   UserProfile? _profile;
@@ -100,9 +145,12 @@ class BajaApp extends StatelessWidget {
       outlineVariant: Colors.white54,
     );
 
-    return ChangeNotifierProvider<BajaChat>(
-      create: (_) => BajaChat(),
-      builder: (context, _) {
+  return MultiProvider(
+    providers: [
+      ChangeNotifierProvider<BajaChat>(create: (_) => BajaChat()),
+      Provider<AuthService>(create: (_) => AuthService()),
+    ],
+    builder: (context, _) {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           title: 'Baja Communication',
@@ -160,114 +208,169 @@ class BajaApp extends StatelessWidget {
   }
 }
 
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final chat = Provider.of<BajaChat>(context, listen: false);
+  State<LoginScreen> createState() => _LoginScreenState();
+}
 
+class _LoginScreenState extends State<LoginScreen> {
+
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _senhaController = TextEditingController();
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Icon(Icons.directions_car, size: 72, color: colorScheme.primary),
-              const SizedBox(height: 16),
-              Text(
-                'BAJA Communication',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: colorScheme.onSurface,
-                    ),
+      body: 
+      Padding (
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text("Baja Communication"),
+            SizedBox(height: 32),
+            TextField(
+              controller: _emailController,
+              decoration: InputDecoration(
+                labelText: "Email",
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Selecione seu perfil para continuar',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurface.withOpacity(0.6)),
-              ),
-              const SizedBox(height: 48),
-              _ProfileCard(
-                icon: Icons.people_alt,
-                label: 'Equipe',
-                description: 'Acesso ao chat e gerenciamento',
-                color: colorScheme.primary,
-                onTap: () => chat.selectProfile(UserProfile.team),
-              ),
-              const SizedBox(height: 16),
-              _ProfileCard(
-                icon: Icons.drive_eta,
-                label: 'Piloto',
-                description: 'Acesso rápido aos botões de status',
-                color: colorScheme.secondary,
-                onTap: () => chat.selectProfile(UserProfile.pilot),
-              ),
-            ],
-          ),
+            ),
+            SizedBox(height: 16),
+            TextField(
+              controller: _senhaController,
+              decoration: InputDecoration(
+                labelText: "Senha",
+                          ),
+            ),
+            SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () {
+                final auth = Provider.of<AuthService>(context, listen: false);
+                final chat = Provider.of<BajaChat>(context, listen: false);
+
+                final usuario = auth.login(
+                  _emailController.text,
+                  _senhaController.text,
+                );
+
+                if (usuario != null) {
+                  final perfil = usuario.perfil == "piloto"
+                    ? UserProfile.pilot
+                    : UserProfile.team;
+                  chat.selectProfile (perfil);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar (content: Text("Email ou senha incorretos")),
+                  );
+                }
+              },
+              child: Text("Entrar"),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => RegisterScreen()),
+                );
+              },
+              child: Text("Não tem conta? Cadastre-se"),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _ProfileCard extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String description;
-  final Color color;
-  final VoidCallback onTap;
+class RegisterScreen extends StatefulWidget {
+  const RegisterScreen({super.key});
 
-  const _ProfileCard({
-    required this.icon,
-    required this.label,
-    required this.description,
-    required this.color,
-    required this.onTap,
-  });
+  @override
+  State<RegisterScreen> createState() => _RegisterScreenState();
+}
+
+class _RegisterScreenState extends State<RegisterScreen> {
+
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _senhaController = TextEditingController();
+  String _perfilSelecionado = "equipe";
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: Theme.of(context).colorScheme.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Row(
-            children: [
-              Icon(icon, size: 40, color: color),
-              const SizedBox(width: 20),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(label,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    Text(description,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurface
-                                .withOpacity(0.6))),
-                  ],
-                ),
+    return Scaffold(
+      body: 
+      Padding (
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text("Baja Communication"),
+            SizedBox(height: 32),
+            TextField(
+              controller: _nameController,
+              decoration: InputDecoration(
+                labelText: "Nome",
               ),
-              Icon(Icons.arrow_forward_ios,
-                  size: 16,
-                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4)),
-            ],
-          ),
+            ),
+            SizedBox(height: 16),
+            TextField(
+              controller: _emailController,
+              decoration: InputDecoration(
+                labelText: "Email",
+              ),
+            ),
+            SizedBox(height: 16),
+            TextField(
+              controller: _senhaController,
+              decoration: InputDecoration(
+                labelText: "Senha",
+                          ),
+            ),
+            SizedBox(height: 16),
+            DropdownButton<String>(
+              value: _perfilSelecionado,
+              isExpanded: true,
+              items: [
+                DropdownMenuItem(value: "equipe", child: Text("Equipe")),
+                DropdownMenuItem(value: "piloto", child: Text("Piloto")),
+              ],
+              onChanged: (valor) {
+                setState(() {
+                  _perfilSelecionado = valor!;
+                });
+              },
+            ),
+            SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () {
+                final auth = Provider.of<AuthService>(context, listen: false);
+                final chat = Provider.of<BajaChat>(context, listen: false);
+
+                auth.cadastrar(
+                  _nameController.text,
+                  _emailController.text,
+                  _senhaController.text,
+                  _perfilSelecionado,
+                );
+
+                final perfil = _perfilSelecionado == "piloto"
+                  ? UserProfile.pilot
+                  : UserProfile.team;
+                  Navigator.pop(context);
+                chat.selectProfile(perfil);
+              },
+              child: Text("Cadastrar"),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: Text("Já possui uma conta? Entre")
+            ),
+          ],
         ),
       ),
     );
