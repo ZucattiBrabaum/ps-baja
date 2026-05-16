@@ -247,6 +247,18 @@ class _LoginScreenState extends State<LoginScreen> {
             SizedBox(height: 24),
             ElevatedButton(
               onPressed: () {
+                if (_emailController.text.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Preencha o email")),
+                  );
+                  return;
+                }
+                if (_senhaController.text.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Preencha a senha")),
+                  );
+                  return;
+                }  
                 final auth = Provider.of<AuthService>(context, listen: false);
                 final chat = Provider.of<BajaChat>(context, listen: false);
 
@@ -346,6 +358,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
             SizedBox(height: 24),
             ElevatedButton(
               onPressed: () {
+                if (_nameController.text.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Preencha o nome")),
+                  );
+                  return;
+                }    
+                if (_emailController.text.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Preencha o email")),
+                  );
+                  return;
+                }                
+                if (!_emailController.text.contains('@')) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Insira um email válido")),
+                  );
+                  return;
+                }            
+                if (_senhaController.text.length < 6) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Senha deve ter pelo menos 6 caracteres")),
+                  );
+                  return;
+                }
                 final auth = Provider.of<AuthService>(context, listen: false);
                 final chat = Provider.of<BajaChat>(context, listen: false);
 
