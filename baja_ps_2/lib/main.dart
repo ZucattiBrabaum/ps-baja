@@ -1,9 +1,61 @@
-
+import 'dart:async';
 import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
 
 void main() {
   runApp(const BajaApp());
+}
+
+enum MessagePriority { info, atencao, urgente }
+
+extension MessagePriorityExt on MessagePriority {
+  String get label {
+    switch (this) {
+      case MessagePriority.info:    return 'Info';
+      case MessagePriority.atencao: return 'Atenção';
+      case MessagePriority.urgente: return 'Urgente';
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case MessagePriority.info:    return Icons.info_outline;
+      case MessagePriority.atencao: return Icons.warning_amber_rounded;
+      case MessagePriority.urgente: return Icons.warning_rounded;
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case MessagePriority.info:    return const Color(0xFF1565C0);
+      case MessagePriority.atencao: return const Color(0xFFF9A825);
+      case MessagePriority.urgente: return const Color(0xFFCC0000);
+    }
+  }
+
+  Color get onColor {
+    switch (this) {
+      case MessagePriority.info:    return Colors.white;
+      case MessagePriority.atencao: return Colors.black87;
+      case MessagePriority.urgente: return Colors.white;
+    }
+  }
+
+  Duration get blinkDuration {
+    switch (this) {
+      case MessagePriority.info:    return const Duration(milliseconds: 900);
+      case MessagePriority.atencao: return const Duration(milliseconds: 600);
+      case MessagePriority.urgente: return const Duration(milliseconds: 380);
+    }
+  }
+
+  double get blinkMinOpacity {
+    switch (this) {
+      case MessagePriority.info:    return 0.45;
+      case MessagePriority.atencao: return 0.30;
+      case MessagePriority.urgente: return 0.15;
+    }
+  }
 }
 
 enum UserProfile { pilot, team }
@@ -12,14 +64,14 @@ class ChatMessage {
   final String id;
   final String content;
   final bool fromPilot;
-  final String? originalMessageId;
   final DateTime timestamp;
+  final MessagePriority priority;
 
   ChatMessage({
     required this.content,
     required this.fromPilot,
-    this.originalMessageId,
     required this.timestamp,
+    this.priority = MessagePriority.info,
   }) : id = DateTime.now().millisecondsSinceEpoch.toString();
 
   String get senderLabel => fromPilot ? 'Piloto' : 'Equipe';
@@ -46,28 +98,20 @@ class AuthService {
       email: "vitorteste@baja.com",
       senha: "ronaldo",
       perfil: "piloto",
-    )
+    ),
   ];
 
   void cadastrar(String nome, String email, String senha, String perfil) {
-    User novoUsuario = User(
-      nome: nome,
-      email: email,
-      senha: senha,
-      perfil: perfil,
-    );
-    _usuarios.add(novoUsuario);
+    _usuarios.add(User(nome: nome, email: email, senha: senha, perfil: perfil));
   }
 
   User? login(String email, String senha) {
-    for (User u in _usuarios) {
-      if (u.email == email && u.senha == senha) {
-        return u;
-      }
+    for (final u in _usuarios) {
+      if (u.email == email && u.senha == senha) return u;
     }
     return null;
-  }        
-}            
+  }
+}
 
 class BajaChat extends ChangeNotifier {
   UserProfile? _profile;
@@ -87,41 +131,35 @@ class BajaChat extends ChangeNotifier {
   final List<ChatMessage> _messages = [];
   List<ChatMessage> get messages => _messages;
 
-  List<String> _options = [
-    "BOX!",
-    "PNEU OK",
-    "MOTOR OK",
-    "PROBLEMA NA TRACAO",
-    "SUPER AQUECIMENTO!",
-    "PROBLEMA COM FREIO!",
-    "PROBLEMA NA SUSPENSAO",
-    "PROBLEMA ELETRICO",
-    "FALHA NA DIRECAO",
-    "COMBUSTIVEL BAIXO",
-    "MENSAGEM LIVRE",
-  ];
-
-  List<String> get options => _options;
-
   void sendMessage({
     required String content,
     required bool fromPilot,
-    String? originalMessageId,
+    MessagePriority priority = MessagePriority.info,
   }) {
     if (content.trim().isEmpty) return;
     _messages.add(ChatMessage(
       content: content,
       fromPilot: fromPilot,
-      originalMessageId: originalMessageId,
       timestamp: DateTime.now(),
+      priority: priority,
     ));
     notifyListeners();
   }
+}
 
-  void updateOptions(List<String> newOptions) {
-    _options = List<String>.from(newOptions);
-    notifyListeners();
-  }
+class BajaPilot extends ChangeNotifier {
+  final List<String> _options = [
+    "Freio",
+    "Elétrica",
+    "Powertrain",
+    "Combustivel",
+    "Proteção CVT",
+    "Não",
+    "Sim",
+    "Não Entendi",
+  ];
+
+  List<String> get options => _options;
 }
 
 class BajaApp extends StatelessWidget {
@@ -145,12 +183,13 @@ class BajaApp extends StatelessWidget {
       outlineVariant: Colors.white54,
     );
 
-  return MultiProvider(
-    providers: [
-      ChangeNotifierProvider<BajaChat>(create: (_) => BajaChat()),
-      Provider<AuthService>(create: (_) => AuthService()),
-    ],
-    builder: (context, _) {
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider<BajaChat>(create: (_) => BajaChat()),
+        ChangeNotifierProvider<BajaPilot>(create: (_) => BajaPilot()),
+        Provider<AuthService>(create: (_) => AuthService()),
+      ],
+      builder: (context, _) {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           title: 'Baja Communication',
@@ -216,66 +255,56 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _senhaController = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: 
-      Padding (
+      body: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text("Baja Communication"),
-            SizedBox(height: 32),
+            const Text("Baja Communication"),
+            const SizedBox(height: 32),
             TextField(
               controller: _emailController,
-              decoration: InputDecoration(
-                labelText: "Email",
-              ),
+              decoration: const InputDecoration(labelText: "Email"),
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             TextField(
               controller: _senhaController,
-              decoration: InputDecoration(
-                labelText: "Senha",
-                          ),
+              decoration: const InputDecoration(labelText: "Senha"),
             ),
-            SizedBox(height: 24),
+            const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () {
                 final auth = Provider.of<AuthService>(context, listen: false);
                 final chat = Provider.of<BajaChat>(context, listen: false);
-
-                final usuario = auth.login(
-                  _emailController.text,
-                  _senhaController.text,
-                );
+                final usuario = auth.login(_emailController.text, _senhaController.text);
 
                 if (usuario != null) {
                   final perfil = usuario.perfil == "piloto"
-                    ? UserProfile.pilot
-                    : UserProfile.team;
-                  chat.selectProfile (perfil);
+                      ? UserProfile.pilot
+                      : UserProfile.team;
+                  chat.selectProfile(perfil);
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar (content: Text("Email ou senha incorretos")),
+                    const SnackBar(content: Text("Email ou senha incorretos")),
                   );
                 }
               },
-              child: Text("Entrar"),
+              child: const Text("Entrar"),
             ),
             TextButton(
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => RegisterScreen()),
+                  MaterialPageRoute(builder: (_) => const RegisterScreen()),
                 );
               },
-              child: Text("Não tem conta? Cadastre-se"),
+              child: const Text("Não tem conta? Cadastre-se"),
             ),
           ],
         ),
@@ -292,7 +321,6 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _senhaController = TextEditingController();
@@ -301,49 +329,38 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: 
-      Padding (
+      body: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text("Baja Communication"),
-            SizedBox(height: 32),
+            const Text("Baja Communication"),
+            const SizedBox(height: 32),
             TextField(
               controller: _nameController,
-              decoration: InputDecoration(
-                labelText: "Nome",
-              ),
+              decoration: const InputDecoration(labelText: "Nome"),
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             TextField(
               controller: _emailController,
-              decoration: InputDecoration(
-                labelText: "Email",
-              ),
+              decoration: const InputDecoration(labelText: "Email"),
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             TextField(
               controller: _senhaController,
-              decoration: InputDecoration(
-                labelText: "Senha",
-                          ),
+              decoration: const InputDecoration(labelText: "Senha"),
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             DropdownButton<String>(
               value: _perfilSelecionado,
               isExpanded: true,
-              items: [
+              items: const [
                 DropdownMenuItem(value: "equipe", child: Text("Equipe")),
                 DropdownMenuItem(value: "piloto", child: Text("Piloto")),
               ],
-              onChanged: (valor) {
-                setState(() {
-                  _perfilSelecionado = valor!;
-                });
-              },
+              onChanged: (valor) => setState(() => _perfilSelecionado = valor!),
             ),
-            SizedBox(height: 24),
+            const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () {
                 final auth = Provider.of<AuthService>(context, listen: false);
@@ -357,18 +374,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 );
 
                 final perfil = _perfilSelecionado == "piloto"
-                  ? UserProfile.pilot
-                  : UserProfile.team;
-                  Navigator.pop(context);
+                    ? UserProfile.pilot
+                    : UserProfile.team;
+                Navigator.pop(context);
                 chat.selectProfile(perfil);
               },
-              child: Text("Cadastrar"),
+              child: const Text("Cadastrar"),
             ),
             TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
-              child: Text("Já possui uma conta? Entre")
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Já possui uma conta? Entre"),
             ),
           ],
         ),
@@ -377,16 +392,47 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 }
 
+class PriorityBadge extends StatelessWidget {
+  final MessagePriority priority;
+
+  const PriorityBadge({super.key, required this.priority});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: priority.color,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(priority.icon, size: 12, color: priority.onColor),
+          const SizedBox(width: 4),
+          Text(
+            priority.label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: priority.onColor,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class ChatMessageCard extends StatelessWidget {
   final ChatMessage message;
-  final String? repliedContent;
   final ColorScheme colorScheme;
   final TextTheme textTheme;
 
   const ChatMessageCard({
     super.key,
     required this.message,
-    this.repliedContent,
     required this.colorScheme,
     required this.textTheme,
   });
@@ -409,11 +455,10 @@ class ChatMessageCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              if (repliedContent != null)
-                Text(
-                  "Respondendo a: $repliedContent",
-                  style: textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
-                ),
+              if (!message.fromPilot) ...[
+                PriorityBadge(priority: message.priority),
+                const SizedBox(height: 6),
+              ],
               Text(
                 "${message.senderLabel}: ${message.content}",
                 style: textTheme.bodyLarge,
@@ -437,6 +482,7 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _controller = TextEditingController();
+  MessagePriority _priority = MessagePriority.info;
 
   @override
   void dispose() {
@@ -446,8 +492,11 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _sendMessage() {
     if (_controller.text.isEmpty) return;
-    Provider.of<BajaChat>(context, listen: false)
-        .sendMessage(content: _controller.text, fromPilot: false);
+    Provider.of<BajaChat>(context, listen: false).sendMessage(
+      content: _controller.text,
+      fromPilot: false,
+      priority: _priority,
+    );
     _controller.clear();
   }
 
@@ -463,9 +512,8 @@ class _ChatScreenState extends State<ChatScreen> {
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Trocar perfil',
-            onPressed: () =>
-                Provider.of<BajaChat>(context, listen: false).logout(),
-          )
+            onPressed: () => Provider.of<BajaChat>(context, listen: false).logout(),
+          ),
         ],
       ),
       body: Column(
@@ -478,20 +526,9 @@ class _ChatScreenState extends State<ChatScreen> {
                   padding: const EdgeInsets.all(8),
                   itemCount: chatData.messages.length,
                   itemBuilder: (context, index) {
-                    final ChatMessage message = chatData
-                        .messages[chatData.messages.length - 1 - index];
-                    String? repliedContent;
-                    if (message.originalMessageId != null) {
-                      for (var msg in chatData.messages) {
-                        if (msg.id == message.originalMessageId) {
-                          repliedContent = msg.content;
-                          break;
-                        }
-                      }
-                    }
+                    final message = chatData.messages[chatData.messages.length - 1 - index];
                     return ChatMessageCard(
                       message: message,
-                      repliedContent: repliedContent,
                       colorScheme: colorScheme,
                       textTheme: textTheme,
                     );
@@ -500,25 +537,77 @@ class _ChatScreenState extends State<ChatScreen> {
               },
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(8),
-            child: Row(
-              children: <Widget>[
-                Expanded(
-                  child: TextField(
-                    controller: _controller,
-                    decoration: const InputDecoration(
-                      hintText: "Mensagem para o piloto...",
-                      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    ),
-                    onSubmitted: (String _) => _sendMessage(),
-                  ),
+          Container(
+            color: colorScheme.surface,
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: MessagePriority.values.map((p) {
+                    final selected = _priority == p;
+                    return Expanded(
+                      child: GestureDetector(
+                        onTap: () => setState(() => _priority = p),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          margin: const EdgeInsets.symmetric(horizontal: 3),
+                          padding: const EdgeInsets.symmetric(vertical: 7),
+                          decoration: BoxDecoration(
+                            color: selected
+                                ? p.color
+                                : p.color.withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: selected
+                                  ? p.color
+                                  : p.color.withValues(alpha: 0.4),
+                              width: selected ? 2 : 1,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(p.icon,
+                                  size: 14,
+                                  color: selected ? p.onColor : p.color),
+                              const SizedBox(width: 4),
+                              Text(
+                                p.label,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: selected ? p.onColor : p.color,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
                 ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.send),
-                  onPressed: _sendMessage,
-                  tooltip: "Enviar",
+                const SizedBox(height: 6),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: TextField(
+                        controller: _controller,
+                        decoration: const InputDecoration(
+                          hintText: "Mensagem para o piloto...",
+                          contentPadding:
+                              EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        ),
+                        onSubmitted: (_) => _sendMessage(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.send),
+                      onPressed: _sendMessage,
+                      tooltip: "Enviar",
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -529,29 +618,251 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-class PilotActionButtons extends StatelessWidget {
+class BlinkingTeamBanner extends StatefulWidget {
+  const BlinkingTeamBanner({super.key});
+
+  @override
+  State<BlinkingTeamBanner> createState() => _BlinkingTeamBannerState();
+}
+
+class _BlinkingTeamBannerState extends State<BlinkingTeamBanner>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late Animation<double> _fade;
+  late Animation<double> _scale;
+
+  MessagePriority _curPriority = MessagePriority.info;
+  String? _dismissedId;
+  Timer? _dismissTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: MessagePriority.info.blinkDuration,
+    );
+    _applyAnims(MessagePriority.info);
+  }
+
+  void _applyAnims(MessagePriority p) {
+    _fade = Tween(begin: 1.0, end: p.blinkMinOpacity).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+    _scale = Tween(begin: 1.0, end: 1.04).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  void _syncAnim(bool active, MessagePriority p) {
+    if (active) {
+      if (_curPriority != p) {
+        _curPriority = p;
+        _ctrl.stop();
+        _ctrl.duration = p.blinkDuration;
+        _applyAnims(p);
+      }
+      if (!_ctrl.isAnimating) _ctrl.repeat(reverse: true);
+    } else {
+      _ctrl.stop();
+      _ctrl.reset();
+    }
+  }
+
+  void _dismiss(String msgId) {
+    _dismissTimer?.cancel();
+    context.read<BajaChat>().sendMessage(content: "Entendi", fromPilot: true);
+    setState(() => _dismissedId = msgId);
+    _dismissTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted) setState(() => _dismissedId = null);
+    });
+  }
+
+  @override
+  void dispose() {
+    _dismissTimer?.cancel();
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+
+    return Consumer<BajaChat>(
+      builder: (context, chat, _) {
+        if (chat.messages.isEmpty) return const SizedBox.shrink();
+
+        final teamMsgs = chat.messages.where((m) => !m.fromPilot).toList();
+        if (teamMsgs.isEmpty) return const SizedBox.shrink();
+
+        final latest = teamMsgs.last;
+        final latestIdx = chat.messages.lastIndexWhere((m) => !m.fromPilot);
+        final pilotReplied =
+            chat.messages.skip(latestIdx + 1).any((m) => m.fromPilot);
+
+        if (pilotReplied || _dismissedId == latest.id) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _syncAnim(false, latest.priority);
+          });
+          return const SizedBox.shrink();
+        }
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _syncAnim(true, latest.priority);
+        });
+
+        final h = latest.timestamp.hour.toString().padLeft(2, '0');
+        final m = latest.timestamp.minute.toString().padLeft(2, '0');
+        final p = latest.priority;
+
+        return AnimatedBuilder(
+          animation: _ctrl,
+          builder: (_, __) => Transform.scale(
+            scale: _scale.value,
+            child: Opacity(
+              opacity: _fade.value,
+              child: Container(
+                width: double.infinity,
+                color: p.color,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Icon(p.icon, color: p.onColor, size: 36),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                "⚠ ATENÇÃO — EQUIPE",
+                                style: textTheme.labelSmall?.copyWith(
+                                  color: p.onColor.withValues(alpha: 0.9),
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1.5,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              PriorityBadge(priority: p),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            latest.content,
+                            style: textTheme.titleMedium?.copyWith(
+                              color: p.onColor,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            "$h:$m",
+                            style: textTheme.labelSmall?.copyWith(
+                              color: p.onColor.withValues(alpha: 0.7),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      onPressed: () => _dismiss(latest.id),
+                      icon: const Icon(Icons.check, size: 18),
+                      label: const Text(
+                        "ENTENDI",
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, letterSpacing: 1),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: p.onColor,
+                        foregroundColor: p.color,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class PilotActionButtons extends StatefulWidget {
   final List<String> options;
-  final ValueChanged<String> onOptionSelected;
+  final ValueChanged<String> onConfirm;
 
   const PilotActionButtons({
     super.key,
     required this.options,
-    required this.onOptionSelected,
+    required this.onConfirm,
   });
+
+  @override
+  State<PilotActionButtons> createState() => _PilotActionButtonsState();
+}
+
+class _PilotActionButtonsState extends State<PilotActionButtons> {
+  int _selected = 0;
+  bool _confirmed = false;
+  Timer? _confirmTimer;
+
+  @override
+  void didUpdateWidget(covariant PilotActionButtons oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_selected >= widget.options.length) _selected = 0;
+  }
+
+  @override
+  void dispose() {
+    _confirmTimer?.cancel();
+    super.dispose();
+  }
+
+  void _up() {
+    if (_selected > 0) setState(() => _selected--);
+  }
+
+  void _down() {
+    if (_selected < widget.options.length - 1) setState(() => _selected++);
+  }
+
+  void _confirm() {
+    widget.onConfirm(widget.options[_selected]);
+    setState(() {
+      _confirmed = true;
+      _selected = 0;
+    });
+    _confirmTimer?.cancel();
+    _confirmTimer = Timer(const Duration(milliseconds: 1200), () {
+      if (mounted) setState(() => _confirmed = false);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
-    if (options.isEmpty) {
+    if (widget.options.isEmpty) {
       return const Center(child: Text("Nenhuma opção disponível"));
     }
 
     return Column(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
         Text(
           "Escolha uma ação:",
           style: textTheme.titleMedium?.copyWith(
@@ -559,35 +870,80 @@ class PilotActionButtons extends StatelessWidget {
             color: colorScheme.onSurface,
           ),
         ),
-        const SizedBox(height: 16),
-        LayoutBuilder(
-          builder: (BuildContext _, BoxConstraints constraints) {
-            double buttonWidth = (constraints.maxWidth - 8) / 2;
-            if (buttonWidth < 150) buttonWidth = constraints.maxWidth;
-
-            return Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.center,
-              children: options.map<Widget>((String option) {
-                return SizedBox(
-                  width: buttonWidth,
-                  child: ElevatedButton(
-                    onPressed: () => onOptionSelected(option),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: colorScheme.primaryContainer,
-                      foregroundColor: colorScheme.onPrimaryContainer,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(option, textAlign: TextAlign.center),
-                    ),
+        const SizedBox(height: 4),
+        Center(
+          child: IconButton(
+            icon: const Icon(Icons.keyboard_arrow_up),
+            tooltip: "Subir",
+            onPressed: _selected > 0 ? _up : null,
+          ),
+        ),
+        for (int i = 0; i < widget.options.length; i++)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: ElevatedButton(
+              onPressed: () => setState(() => _selected = i),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: i == _selected
+                    ? colorScheme.primary
+                    : colorScheme.primaryContainer,
+                foregroundColor: i == _selected
+                    ? colorScheme.onPrimary
+                    : colorScheme.onPrimaryContainer,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                alignment: Alignment.centerLeft,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: Text(
+                  widget.options[i],
+                  textAlign: TextAlign.left,
+                ),
+              ),
+            ),
+          ),
+        Center(
+          child: IconButton(
+            icon: const Icon(Icons.keyboard_arrow_down),
+            tooltip: "Descer",
+            onPressed: _selected < widget.options.length - 1 ? _down : null,
+          ),
+        ),
+        const SizedBox(height: 4),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 250),
+          child: _confirmed
+              ? ElevatedButton.icon(
+                  key: const ValueKey('confirmed'),
+                  onPressed: null,
+                  icon: const Icon(Icons.check_circle, size: 22),
+                  label: const Text(
+                    "ENVIADO!",
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold, letterSpacing: 1),
                   ),
-                );
-              }).toList(),
-            );
-          },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green.shade600,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.green.shade600,
+                    disabledForegroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                )
+              : ElevatedButton(
+                  key: const ValueKey('idle'),
+                  onPressed: _confirm,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: colorScheme.secondary,
+                    foregroundColor: colorScheme.onSecondary,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  child: const Text(
+                    "CONFIRMAR",
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold, letterSpacing: 1),
+                  ),
+                ),
         ),
       ],
     );
@@ -599,7 +955,8 @@ class PilotScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bajaChat = Provider.of<BajaChat>(context);
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
       appBar: AppBar(
@@ -610,30 +967,95 @@ class PilotScreen extends StatelessWidget {
             tooltip: 'Trocar perfil',
             onPressed: () =>
                 Provider.of<BajaChat>(context, listen: false).logout(),
-          )
+          ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            Expanded(
-              child: SingleChildScrollView(
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: PilotActionButtons(
-                    options: bajaChat.options,
-                    onOptionSelected: (option) => bajaChat.sendMessage(
-                      content: option,
-                      fromPilot: true,
+      body: Column(
+        children: [
+          const BlinkingTeamBanner(),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  flex: 5,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border(
+                        right: BorderSide(
+                          color: colorScheme.outline,
+                          width: 1,
+                        ),
+                      ),
+                    ),
+                    child: Consumer<BajaChat>(
+                      builder: (context, chat, _) {
+                        if (chat.messages.isEmpty) {
+                          return Center(
+                            child: Text(
+                              "Nenhuma mensagem ainda.",
+                              style: textTheme.bodyMedium?.copyWith(
+                                color: colorScheme.onSurface
+                                    .withValues(alpha: 0.5),
+                              ),
+                            ),
+                          );
+                        }
+                        return ListView.builder(
+                          reverse: true,
+                          padding: const EdgeInsets.all(8),
+                          itemCount: chat.messages.length,
+                          itemBuilder: (context, i) {
+                            final msg =
+                                chat.messages[chat.messages.length - 1 - i];
+                            return Container(
+                              decoration: !msg.fromPilot
+                                  ? BoxDecoration(
+                                      border: Border(
+                                        left: BorderSide(
+                                          color: msg.priority.color,
+                                          width: 4,
+                                        ),
+                                      ),
+                                    )
+                                  : null,
+                              child: ChatMessageCard(
+                                message: msg,
+                                colorScheme: colorScheme,
+                                textTheme: textTheme,
+                              ),
+                            );
+                          },
+                        );
+                      },
                     ),
                   ),
                 ),
-              ),
+                Expanded(
+                  flex: 4,
+                  child: Container(
+                    color: colorScheme.surface,
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+                      child: Consumer<BajaPilot>(
+                        builder: (context, piloto, _) {
+                          return PilotActionButtons(
+                            options: piloto.options,
+                            onConfirm: (opt) =>
+                                context.read<BajaChat>().sendMessage(
+                                      content: opt,
+                                      fromPilot: true,
+                                    ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -656,7 +1078,7 @@ class _RootScreenState extends State<RootScreen> {
     _selectedIndex = widget.initialIndex;
   }
 
-  final List<Widget> _screens = const [
+  static const List<Widget> _screens = [
     ChatScreen(),
     PilotScreen(),
   ];
