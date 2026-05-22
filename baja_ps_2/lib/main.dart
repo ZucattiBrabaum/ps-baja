@@ -1272,6 +1272,7 @@ class _PilotScreenState extends State<PilotScreen> {
                             padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
                             child: PilotActionButtons(
                               options: piloto.options,
+                              enabled: pending == null,
                               onConfirm: (opt) => chat.sendMessage(content: opt.message, fromPilot: true),
                             ),
                           ),
@@ -1359,7 +1360,8 @@ ThemeData _pilotTheme() {
 class PilotActionButtons extends StatefulWidget {
   final List<PilotOption> options;
   final ValueChanged<PilotOption> onConfirm;
-  const PilotActionButtons({super.key, required this.options, required this.onConfirm});
+  final bool enabled;
+  const PilotActionButtons({super.key, required this.options, required this.onConfirm, this.enabled = true});
 
   @override
   State<PilotActionButtons> createState() => _PilotActionButtonsState();
@@ -1374,7 +1376,9 @@ class _PilotActionButtonsState extends State<PilotActionButtons> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _focusNode.requestFocus());
+    if (widget.enabled) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _focusNode.requestFocus());
+    }
   }
 
   @override
@@ -1411,7 +1415,8 @@ class _PilotActionButtonsState extends State<PilotActionButtons> {
 
     return Focus(
       focusNode: _focusNode,
-      autofocus: true,
+      autofocus: widget.enabled,
+      canRequestFocus: widget.enabled,
       onKeyEvent: (_, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
         if (event.logicalKey == LogicalKeyboardKey.arrowUp)                                                   { _up();      return KeyEventResult.handled; }
