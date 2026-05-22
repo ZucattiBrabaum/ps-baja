@@ -31,7 +31,7 @@ extension MessagePriorityExt on MessagePriority {
     MessagePriority.urgente     => const Color(0xFFCC0000),
     MessagePriority.box         => const Color(0xFF6A1B9A),
     MessagePriority.localizacao => const Color(0xFF00695C),
-    MessagePriority.parado      => const Color(0xFF37474F), // Mantido o padrão original do mainnovo
+    MessagePriority.parado      => const Color(0xFFE65100),
   };
 
   Color get onColor => this == MessagePriority.atencao ? Colors.black87 : Colors.white;
