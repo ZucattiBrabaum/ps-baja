@@ -5,446 +5,371 @@ import '../../providers/histórico_chat.dart';
 import '../../providers/mensagem_piloto.dart';
 import '../../modelos/modelo_chat.dart';
 import '../equipe/tela_chat.dart';
+import '../mapa.dart';
 
-class BlinkingTeamBanner extends StatefulWidget {
-  const BlinkingTeamBanner({super.key});
+class FullscreenTeamBanner extends StatefulWidget {
+  final ChatMessage message;
+  final List<PilotOption> pilotOptions;
+  final VoidCallback onDismiss;
+
+  const FullscreenTeamBanner({
+    super.key,
+    required this.message,
+    required this.pilotOptions,
+    required this.onDismiss,
+  });
 
   @override
-  State<BlinkingTeamBanner> createState() => _BlinkingTeamBannerState();
+  State<FullscreenTeamBanner> createState() => _FullscreenTeamBannerState();
 }
 
-class _BlinkingTeamBannerState extends State<BlinkingTeamBanner>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-  late Animation<double> _fade;
-  late Animation<double> _scale;
+class _FullscreenTeamBannerState extends State<FullscreenTeamBanner> {
+  final _focusNode = FocusNode();
+  bool _visible = true;
+  Timer? _blinkTimer;
+  String? _highlightedKey;
 
-  MessagePriority _curPriority = MessagePriority.info;
-  String? _dismissedId;
-  Timer? _dismissTimer;
+  static const _baseLat = -25.4284;
+  static const _baseLng = -49.2733;
+  double _lat = _baseLat;
+  double _lng = _baseLng;
+  bool _gpsReady = false;
+  Timer? _gpsTimer;
+  int _gpsTick = 0;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: MessagePriority.info.blinkDuration,
-    );
-    _applyAnims(MessagePriority.info);
-  }
-
-  void _applyAnims(MessagePriority p) {
-    _fade = Tween(begin: 1.0, end: p.blinkMinOpacity).animate(
-      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
-    );
-    _scale = Tween(begin: 1.0, end: 1.04).animate(
-      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
-    );
-  }
-
-  void _syncAnim(bool active, MessagePriority p) {
-    if (active) {
-      if (_curPriority != p) {
-        _curPriority = p;
-        _ctrl.stop();
-        _ctrl.duration = p.blinkDuration;
-        _applyAnims(p);
-      }
-      if (!_ctrl.isAnimating) _ctrl.repeat(reverse: true);
-    } else {
-      _ctrl.stop();
-      _ctrl.reset();
-    }
-  }
-
-  void _dismiss(String msgId) {
-    _dismissTimer?.cancel();
-    context.read<BajaChat>().sendMessage(content: "Entendi", fromPilot: true);
-    setState(() => _dismissedId = msgId);
-    _dismissTimer = Timer(const Duration(seconds: 4), () {
-      if (mounted) setState(() => _dismissedId = null);
+    _blinkTimer = Timer.periodic(widget.message.priority.blinkDuration, (_) {
+      if (mounted) setState(() => _visible = !_visible);
     });
-  }
 
-  @override
-  void dispose() {
-    _dismissTimer?.cancel();
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-
-    return Consumer<BajaChat>(
-      builder: (context, chat, _) {
-        if (chat.messages.isEmpty) return const SizedBox.shrink();
-
-        final teamMsgs = chat.messages.where((m) => !m.fromPilot).toList();
-        if (teamMsgs.isEmpty) return const SizedBox.shrink();
-
-        final latest = teamMsgs.last;
-        final latestIdx = chat.messages.lastIndexWhere((m) => !m.fromPilot);
-        final pilotReplied =
-            chat.messages.skip(latestIdx + 1).any((m) => m.fromPilot);
-
-        if (pilotReplied || _dismissedId == latest.id) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _syncAnim(false, latest.priority);
-          });
-          return const SizedBox.shrink();
-        }
-
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _syncAnim(true, latest.priority);
+    if (widget.message.priority == MessagePriority.localizacao) {
+      _gpsTimer = Timer.periodic(const Duration(milliseconds: 600), (_) {
+        if (!mounted) return;
+        setState(() {
+          _gpsTick++;
+          if (_gpsTick >= 4) {
+            _gpsReady = true;
+            _gpsTimer?.cancel();
+          } else {
+            _lat = _baseLat + (_gpsTick * 0.00015);
+            _lng = _baseLng - (_gpsTick * 0.0001);
+          }
         });
+      });
+    }
 
-        final h = latest.timestamp.hour.toString().padLeft(2, '0');
-        final m = latest.timestamp.minute.toString().padLeft(2, '0');
-        final p = latest.priority;
-
-        return AnimatedBuilder(
-          animation: _ctrl,
-          builder: (_, __) => Transform.scale(
-            scale: _scale.value,
-            child: Opacity(
-              opacity: _fade.value,
-              child: Container(
-                width: double.infinity,
-                color: p.color,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Icon(p.icon, color: p.onColor, size: 36),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Text(
-                                "⚠ ATENÇÃO — EQUIPE",
-                                style: textTheme.labelSmall?.copyWith(
-                                  color: p.onColor.withValues(alpha: 0.9),
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1.5,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              PriorityBadge(priority: p),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            latest.content,
-                            style: textTheme.titleMedium?.copyWith(
-                              color: p.onColor,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            "$h:$m",
-                            style: textTheme.labelSmall?.copyWith(
-                              color: p.onColor.withValues(alpha: 0.7),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    ElevatedButton.icon(
-                      onPressed: () => _dismiss(latest.id),
-                      icon: const Icon(Icons.check, size: 18),
-                      label: const Text(
-                        "ENTENDI",
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, letterSpacing: 1),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: p.onColor,
-                        foregroundColor: p.color,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class PilotActionButtons extends StatefulWidget {
-  final List<String> options;
-  final ValueChanged<String> onConfirm;
-
-  const PilotActionButtons({
-    super.key,
-    required this.options,
-    required this.onConfirm,
-  });
-
-  @override
-  State<PilotActionButtons> createState() => _PilotActionButtonsState();
-}
-
-class _PilotActionButtonsState extends State<PilotActionButtons> {
-  int _selected = 0;
-  bool _confirmed = false;
-  Timer? _confirmTimer;
-
-  @override
-  void didUpdateWidget(covariant PilotActionButtons oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (_selected >= widget.options.length) _selected = 0;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _focusNode.requestFocus());
   }
 
   @override
   void dispose() {
-    _confirmTimer?.cancel();
+    _blinkTimer?.cancel();
+    _gpsTimer?.cancel();
+    _focusNode.dispose();
     super.dispose();
   }
 
-  void _up() {
-    if (_selected > 0) setState(() => _selected--);
-  }
-
-  void _down() {
-    if (_selected < widget.options.length - 1) setState(() => _selected++);
-  }
-
-  void _confirm() {
-    widget.onConfirm(widget.options[_selected]);
-    setState(() {
-      _confirmed = true;
-      _selected = 0;
-    });
-    _confirmTimer?.cancel();
-    _confirmTimer = Timer(const Duration(milliseconds: 1200), () {
-      if (mounted) setState(() => _confirmed = false);
-    });
+  void _handleKey(String char) {
+    final chat = Provider.of<BajaChat>(context, listen: false);
+    final p = widget.pilotOptions.firstWhere(
+      (o) => o.label.toLowerCase().startsWith(char.toLowerCase()),
+      orElse: () => widget.pilotOptions.first,
+    );
+    chat.sendMessage(content: p.message, fromPilot: true);
+    widget.onDismiss();
   }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
+    final p = widget.message.priority;
+    final isBlinkingPriority = p == MessagePriority.urgente || p == MessagePriority.box;
+    final bg = isBlinkingPriority
+        ? (_visible ? p.color : Colors.black)
+        : p.color;
 
-    if (widget.options.isEmpty) {
-      return const Center(child: Text("Nenhuma opção disponível"));
+    return Focus(
+      focusNode: _focusNode,
+      onKeyEvent: (node, event) {
+        final txt = event.character;
+        if (txt != null && txt.isNotEmpty) {
+          setState(() => _highlightedKey = txt.toLowerCase());
+          _handleKey(txt);
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Scaffold(
+        backgroundColor: bg,
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                  decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(8)),
+                  child: Text(
+                    '⚠ ${p.label.toUpperCase()} — EQUIPE',
+                    style: const TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 1),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Expanded(
+                  child: Center(
+                    child: p == MessagePriority.localizacao
+                        ? _buildGpsContent()
+                        : Text(
+                            widget.message.content.toUpperCase(),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: isBlinkingPriority ? Colors.white : p.onColor,
+                              fontSize: 48,
+                              fontWeight: FontWeight.w900,
+                              height: 1.1,
+                            ),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                _buildHorizontalKeyboard(),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGpsContent() {
+    if (!_gpsReady) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(width: 48, height: 48, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 5)),
+          const SizedBox(height: 24),
+          Text(
+            'CONECTANDO GPS...\n[TICK $_gpsTick/4]',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: 1.5),
+          ),
+        ],
+      );
     }
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          "Escolha uma ação:",
-          style: textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.bold,
-            color: colorScheme.onSurface,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Center(
-          child: IconButton(
-            icon: const Icon(Icons.keyboard_arrow_up),
-            tooltip: "Subir",
-            onPressed: _selected > 0 ? _up : null,
-          ),
-        ),
-        for (int i = 0; i < widget.options.length; i++)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: ElevatedButton(
-              onPressed: () => setState(() => _selected = i),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: i == _selected
-                    ? colorScheme.primary
-                    : colorScheme.primaryContainer,
-                foregroundColor: i == _selected
-                    ? colorScheme.onPrimary
-                    : colorScheme.onPrimaryContainer,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                alignment: Alignment.centerLeft,
+    return Container(
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white, width: 4)),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Stack(
+          children: [
+            Image.asset('assets/images/Mapa_Baja.jpeg', fit: BoxFit.cover, width: double.infinity, height: double.infinity),
+            Positioned(
+              top: 100,
+              left: 140,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: const BoxDecoration(color: Colors.blue, shape: BoxShape.circle),
+                  ),
+                  const Icon(Icons.navigation, color: Colors.white, size: 20),
+                ],
               ),
-              child: Padding(
-                padding: const EdgeInsets.only(left: 8),
+            ),
+            Positioned(
+              bottom: 12,
+              left: 12,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(8)),
                 child: Text(
-                  widget.options[i],
-                  textAlign: TextAlign.left,
+                  'LAT: ${_lat.toStringAsFixed(5)}  |  LNG: ${_lng.toStringAsFixed(5)}',
+                  style: const TextStyle(color: Colors.greenAccent, fontSize: 14, fontFamily: 'monospace', fontWeight: FontWeight.bold),
                 ),
               ),
             ),
-          ),
-        Center(
-          child: IconButton(
-            icon: const Icon(Icons.keyboard_arrow_down),
-            tooltip: "Descer",
-            onPressed: _selected < widget.options.length - 1 ? _down : null,
-          ),
+          ],
         ),
-        const SizedBox(height: 4),
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 250),
-          child: _confirmed
-              ? ElevatedButton.icon(
-                  key: const ValueKey('confirmed'),
-                  onPressed: null,
-                  icon: const Icon(Icons.check_circle, size: 22),
-                  label: const Text(
-                    "ENVIADO!",
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold, letterSpacing: 1),
+      ),
+    );
+  }
+
+  Widget _buildHorizontalKeyboard() {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(12)),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: widget.pilotOptions.map((opt) {
+          final char = opt.label[0].toLowerCase();
+          final isSel = _highlightedKey == char;
+          final oc = opt.optionColor;
+          return Expanded(
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              height: 64,
+              decoration: BoxDecoration(
+                color: isSel ? Colors.white : oc.bg,
+                borderRadius: BorderRadius.circular(8),
+                border: isSel ? Border.all(color: oc.selectedBorder, width: 4) : null,
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    opt.label[0].toUpperCase(),
+                    style: TextStyle(color: isSel ? Colors.black : oc.fg, fontSize: 20, fontWeight: FontWeight.w900),
                   ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green.shade600,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: Colors.green.shade600,
-                    disabledForegroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  Text(
+                    opt.label.substring(1).toUpperCase(),
+                    style: TextStyle(color: isSel ? Colors.black87 : oc.fg.withOpacity(0.8), fontSize: 9, fontWeight: FontWeight.bold),
                   ),
-                )
-              : ElevatedButton(
-                  key: const ValueKey('idle'),
-                  onPressed: _confirm,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: colorScheme.secondary,
-                    foregroundColor: colorScheme.onSecondary,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  child: const Text(
-                    "CONFIRMAR",
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold, letterSpacing: 1),
-                  ),
-                ),
-        ),
-      ],
+                ],
+              ),
+            ),
+          );
+        }).toList(),
+      ),
     );
   }
 }
 
-class PilotScreen extends StatelessWidget {
+class PilotScreen extends StatefulWidget {
   const PilotScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
+  State<PilotScreen> createState() => _PilotScreenState();
+}
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("BAJA - Piloto"),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Trocar perfil',
-            onPressed: () =>
-                Provider.of<BajaChat>(context, listen: false).logout(),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          const BlinkingTeamBanner(),
-          Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+class _PilotScreenState extends State<PilotScreen> {
+  bool _mapMinimized = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final chat = Provider.of<BajaChat>(context);
+    final pilotData = Provider.of<BajaPilot>(context);
+    final list = chat.messages;
+    final lastTeamMessage = list.isEmpty ? null : list.lastWhere((m) => !m.fromPilot, orElse: () => list.first);
+
+    return Theme(
+      data: _buildPilotTheme(context),
+      child: Builder(
+        builder: (ctx) {
+          if (lastTeamMessage != null && lastTeamMessage.timestamp.add(const Duration(seconds: 12)).isAfter(DateTime.now())) {
+            return FullscreenTeamBanner(
+              message: lastTeamMessage,
+              pilotOptions: pilotData.options,
+              onDismiss: () => setState(() {}),
+            );
+          }
+
+          return Scaffold(
+            appBar: AppBar(title: const Text('PAINEL DO PILOTO')),
+            body: Stack(
               children: [
-                Expanded(
-                  flex: 5,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border(
-                        right: BorderSide(
-                          color: colorScheme.outline,
-                          width: 1,
-                        ),
-                      ),
-                    ),
-                    child: Consumer<BajaChat>(
-                      builder: (context, chat, _) {
-                        if (chat.messages.isEmpty) {
-                          return Center(
-                            child: Text(
-                              "Nenhuma mensagem ainda.",
-                              style: textTheme.bodyMedium?.copyWith(
-                                color: colorScheme.onSurface
-                                    .withValues(alpha: 0.5),
-                              ),
-                            ),
-                          );
-                        }
-                        return ListView.builder(
-                          reverse: true,
-                          padding: const EdgeInsets.all(8),
-                          itemCount: chat.messages.length,
-                          itemBuilder: (context, i) {
-                            final msg =
-                                chat.messages[chat.messages.length - 1 - i];
-                            return Container(
-                              decoration: !msg.fromPilot
-                                  ? BoxDecoration(
-                                      border: Border(
-                                        left: BorderSide(
-                                          color: msg.priority.color,
-                                          width: 4,
-                                        ),
-                                      ),
-                                    )
-                                  : null,
-                              child: ChatMessageCard(
-                                message: msg,
-                                colorScheme: colorScheme,
-                                textTheme: textTheme,
-                              ),
-                            );
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                Expanded(
-                  flex: 4,
-                  child: Container(
-                    color: colorScheme.surface,
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
-                      child: Consumer<BajaPilot>(
-                        builder: (context, piloto, _) {
-                          return PilotActionButtons(
-                            options: piloto.options,
-                            onConfirm: (opt) =>
-                                context.read<BajaChat>().sendMessage(
-                                      content: opt,
-                                      fromPilot: true,
-                                    ),
+                Column(
+                  children: [
+                    Expanded(
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: list.length,
+                        itemBuilder: (context, i) {
+                          final msg = list[i];
+                          return ChatMessageCard(
+                            message: msg,
+                            colorScheme: Theme.of(context).colorScheme,
+                            textTheme: Theme.of(context).textTheme,
+                            pilotView: true,
                           );
                         },
                       ),
                     ),
-                  ),
+                    _buildPilotKeyboard(ctx, chat, pilotData.options),
+                  ],
+                ),
+                MapOverlay(
+                  minimized: _mapMinimized,
+                  onToggle: () => setState(() => _mapMinimized = !_mapMinimized),
                 ),
               ],
             ),
-          ),
-        ],
+          );
+        },
       ),
+    );
+  }
+
+  Widget _buildPilotKeyboard(BuildContext ctx, BajaChat chat, List<PilotOption> options) {
+    return Container(
+      color: Theme.of(ctx).colorScheme.surfaceContainer,
+      padding: const EdgeInsets.all(12),
+      child: GridView.count(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisCount: 4,
+        mainAxisSpacing: 8,
+        crossAxisSpacing: 8,
+        childAspectRatio: 1.4,
+        children: options.map((opt) {
+          final oc = opt.optionColor;
+          return ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: oc.bg,
+              foregroundColor: oc.fg,
+              padding: EdgeInsets.zero,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => chat.sendMessage(content: opt.message, fromPilot: true),
+            child: Text(
+              opt.label.toUpperCase(),
+              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 0.5),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  ThemeData _buildPilotTheme(BuildContext context) {
+    final base = ThemeData.dark();
+    final cs = ColorScheme.fromSeed(seedColor: Colors.pink, brightness: Brightness.dark);
+    return base.copyWith(
+      colorScheme: cs,
+      scaffoldBackgroundColor: cs.surfaceContainerHighest,
+      appBarTheme: AppBarTheme(
+        backgroundColor: Colors.pink.shade600,
+        foregroundColor: Colors.white,
+        elevation: 1,
+        shadowColor: Colors.black26,
+        titleTextStyle: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: cs.primary,
+          foregroundColor: cs.onPrimary,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        fillColor: Colors.white,
+        filled: true,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: cs.outline)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: cs.outline)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: cs.primary)),
+      ),
+      cardTheme: CardThemeData(
+        color: Colors.white,
+        elevation: 2,
+        shadowColor: Colors.black12,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      iconTheme: IconThemeData(color: Colors.grey.shade800),
+      dividerColor: Colors.grey.shade300,
     );
   }
 }

@@ -12,10 +12,13 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _senhaController = TextEditingController();
-  String _perfilSelecionado = "equipe";
+  final _nomeCtrl  = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _senhaCtrl = TextEditingController();
+  String _perfil = 'equipe';
+
+  void _snack(String msg) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
 
   @override
   Widget build(BuildContext context) {
@@ -25,80 +28,39 @@ class _RegisterScreenState extends State<RegisterScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text("Baja Communication"),
+            const Text('Baja Communication'),
             const SizedBox(height: 32),
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(labelText: "Nome"),
-            ),
+            TextField(controller: _nomeCtrl,  decoration: const InputDecoration(labelText: 'Nome')),
             const SizedBox(height: 16),
-            TextField(
-              controller: _emailController,
-              decoration: const InputDecoration(labelText: "Email"),
-            ),
+            TextField(controller: _emailCtrl, decoration: const InputDecoration(labelText: 'Email')),
             const SizedBox(height: 16),
-            TextField(
-              controller: _senhaController,
-              decoration: const InputDecoration(labelText: "Senha"),
-            ),
+            TextField(controller: _senhaCtrl, decoration: const InputDecoration(labelText: 'Senha'), obscureText: true),
             const SizedBox(height: 16),
             DropdownButton<String>(
-              value: _perfilSelecionado,
+              value: _perfil,
               isExpanded: true,
               items: const [
-                DropdownMenuItem(value: "equipe", child: Text("Equipe")),
-                DropdownMenuItem(value: "piloto", child: Text("Piloto")),
+                DropdownMenuItem(value: 'equipe', child: Text('Equipe')),
+                DropdownMenuItem(value: 'piloto', child: Text('Piloto')),
               ],
-              onChanged: (valor) => setState(() => _perfilSelecionado = valor!),
+              onChanged: (v) => setState(() => _perfil = v!),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () {
-                if (_nameController.text.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Preencha o nome")),
-                  );
-                  return;
-                }    
-                if (_emailController.text.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Preencha o email")),
-                  );
-                  return;
-                }                
-                if (!_emailController.text.contains('@')) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Insira um email válido")),
-                  );
-                  return;
-                }            
-                if (_senhaController.text.length < 6) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Senha deve ter pelo menos 6 caracteres")),
-                  );
-                  return;
-                }
-                final auth = Provider.of<AuthService>(context, listen: false);
-                final chat = Provider.of<BajaChat>(context, listen: false);
-
-                auth.cadastrar(
-                  _nameController.text,
-                  _emailController.text,
-                  _senhaController.text,
-                  _perfilSelecionado,
-                );
-
-                final perfil = _perfilSelecionado == "piloto"
-                    ? UserProfile.pilot
-                    : UserProfile.team;
+                if (_nomeCtrl.text.isEmpty)         { _snack('Preencha o nome'); return; }
+                if (_emailCtrl.text.isEmpty)        { _snack('Preencha o email'); return; }
+                if (!_emailCtrl.text.contains('@')) { _snack('Email inválido'); return; }
+                if (_senhaCtrl.text.length < 6)     { _snack('Senha deve ter pelo menos 6 caracteres'); return; }
+                context.read<AuthService>().cadastrar(_nomeCtrl.text, _emailCtrl.text, _senhaCtrl.text, _perfil);
                 Navigator.pop(context);
-                chat.selectProfile(perfil);
+                context.read<BajaChat>().selectProfile(_perfil == 'piloto' ? UserProfile.pilot : UserProfile.team);
               },
-              child: const Text("Cadastrar"),
+              child: const Text('Cadastrar'),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text("Já possui uma conta? Entre"),
+              child: const Text('Já possui uma conta? Entre'),
             ),
           ],
         ),
