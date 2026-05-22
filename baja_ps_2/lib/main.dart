@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'providers/histórico_chat.dart';
+import 'providers/historico_chat.dart';
 import 'providers/mensagem_piloto.dart';
 import 'cadastro.dart';
 import 'modelos/modelo_chat.dart';

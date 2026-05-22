@@ -4,7 +4,7 @@ class MapOverlay extends StatelessWidget {
   final bool minimized;
   final VoidCallback onToggle;
 
-  const MapOverlay({required this.minimized, required this.onToggle});
+  const MapOverlay({super.key, required this.minimized, required this.onToggle});
 
   @override
   Widget build(BuildContext context) {
