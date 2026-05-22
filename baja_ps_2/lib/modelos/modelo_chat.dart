@@ -36,11 +36,11 @@ extension MessagePriorityExt on MessagePriority {
 
   Color get onColor => this == MessagePriority.atencao ? Colors.black87 : Colors.white;
 
-  // Copiado exatamente das regras de tempo do mainnovo.dart
+
   Duration get blinkDuration => switch (this) {
     MessagePriority.urgente => const Duration(milliseconds: 400),
-    MessagePriority.box     => const Duration(milliseconds: 600),
-    _                       => const Duration(seconds: 2),
+    MessagePriority.box     => const Duration(milliseconds: 500),
+    _                       => const Duration(milliseconds: 500),
   };
 }
 
